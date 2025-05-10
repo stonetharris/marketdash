@@ -1,6 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import TICKERS from './data/sp500.json';
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+import TickerBanner from './components/TickerBanner';
+import WatchlistForm from './components/WatchlistForm';
+import WatchlistItems from './components/WatchlistItems';
 
 const API_KEY = process.env.REACT_APP_FINNHUB_API_KEY;
 
@@ -9,6 +14,24 @@ function App() {
   const [newTicker, setNewTicker] = useState('');
   const [prices, setPrices] = useState({});
   const [topMovers, setTopMovers] = useState({ gainers: [], losers: [] });
+
+  const fetchPrices = useCallback(async () => {
+    const newPrices = {};
+    for (let item of watchlist) {
+      try {
+        const res = await axios.get(`https://finnhub.io/api/v1/quote`, {
+          params: {
+            symbol: item.ticker,
+            token: API_KEY,
+          },
+        });
+        newPrices[item.ticker] = res.data;
+      } catch (err) {
+        console.error(`Error fetching ${item.ticker}:`, err);
+      }
+    }
+    setPrices(newPrices);
+  }, [watchlist]);
 
   useEffect(() => {
     fetchWatchlist();
@@ -37,24 +60,6 @@ function App() {
   const fetchWatchlist = async () => {
     const res = await axios.get('/api/watchlist/');
     setWatchlist(res.data);
-  };
-
-  const fetchPrices = async () => {
-    const newPrices = {};
-    for (let item of watchlist) {
-      try {
-        const res = await axios.get(`https://finnhub.io/api/v1/quote`, {
-          params: {
-            symbol: item.ticker,
-            token: API_KEY,
-          },
-        });
-        newPrices[item.ticker] = res.data;
-      } catch (err) {
-        console.error(`Error fetching ${item.ticker}:`, err);
-      }
-    }
-    setPrices(newPrices);
   };
 
   const addTicker = async (e) => {
@@ -91,72 +96,33 @@ function App() {
   
 
   return (
-    <div style={{ padding: 30 }}>
-      <div style={{
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        background: '#111',
-        color: 'white',
-        padding: '10px 0',
-        fontWeight: 'bold',
-        fontSize: '16px',
-        borderBottom: '2px solid #444',
-        position: 'relative',
-      }}>
-        <div style={{
-          display: 'inline-block',
-          paddingLeft: '100%',
-          animation: 'scroll-left 30s linear infinite',
-        }}>
-          {[...topMovers.gainers, ...topMovers.losers, ...topMovers.gainers, ...topMovers.losers].map((stock, idx) => {
-            const color = stock.dp > 0 ? 'limegreen' : 'salmon';
-            const sign = stock.dp > 0 ? '+' : '';
-            return (
-              <span key={`${stock.symbol}-${idx}`} style={{ marginRight: 40, color }}>
-                {stock.symbol}: ${stock.c?.toFixed(2)} ({sign}{stock.dp?.toFixed(2)}%)
-              </span>
-            );
-          })}
-        </div>
-      </div>
+    <>
+      <Navbar />
 
-      <h1>📈 My Watchlist</h1>
-      <form onSubmit={addTicker}>
-        <input
-          value={newTicker}
-          onChange={(e) => setNewTicker(e.target.value)}
-          placeholder="Add Ticker (e.g. AAPL)"
+      <main className="px-6 py-8 max-w-4xl mx-auto">
+        <TickerBanner topMovers={topMovers} />
+
+        <h1 className="text-4xl font-bold text-teal-400 mb-6 mt-8">📈 My Watchlist</h1>
+
+        <WatchlistForm
+          newTicker={newTicker}
+          setNewTicker={setNewTicker}
+          addTicker={addTicker}
         />
-        <button type="submit">Add</button>
-      </form>
-      <ul>
-        {watchlist.map((item) => {
-          const quote = prices[item.ticker];
-          const price = quote?.c;
-          const change = quote?.dp;
-          const color = change > 0 ? 'green' : change < 0 ? 'red' : 'black';
-          return (
-            <li key={item.id}>
-              {item.ticker}{' '}
-              {price !== undefined && (
-                <span style={{ color }}>
-                  ${price.toFixed(2)} ({change?.toFixed(2)}%) | Open: {quote.o} High: {quote.h} Low: {quote.l}
-                </span>
-              )}
-              <button
-                onClick={async () => {
-                  await axios.delete(`/api/watchlist/${item.id}/`);
-                  fetchWatchlist();
-                }}
-                style={{ marginLeft: 10, color: 'gray', border: 'none', background: 'none', cursor: 'pointer' }}
-              >
-                Delete ❌
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+
+        <WatchlistItems
+          watchlist={watchlist}
+          prices={prices}
+          onDelete={async (id) => {
+            await axios.delete(`/api/watchlist/${id}/`);
+            fetchWatchlist();
+          }}
+        />
+      </main>
+
+      <Footer />
+    </>
+
   );
 }
 
